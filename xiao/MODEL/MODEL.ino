@@ -4,10 +4,11 @@
 #include <st7789v2.h>
 #include "SPI.h"
 #include "seeed.h"
-#include <bluefruit.h>
+#include <ArduinoBLE.h>
 
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 280
+
 int getStringWidth(const char *str, const sFONT *font) {
   return strlen(str) * font->Width;
 }
@@ -15,9 +16,12 @@ int getStringWidth(const char *str, const sFONT *font) {
 // 显示屏初始化
 st7789v2 Display;
 
-
 // 初始化传感器对象
 LSM6DS3 myIMU(I2C_MODE, 0x6A);  // 默认I2C地址0x6A
+
+BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214");  // 自定义服务UUID
+BLEByteCharacteristic switchCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);  // 自定义特征UUID
+BLEStringCharacteristic labelCharacteristic("19B10002-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite, 32); // 定义labelCharacteristic
 
 enum sensor_status {
   NOT_USED = -1,
@@ -94,147 +98,6 @@ eiSensors sensors[] = {
   { "gyrZ", &data[5], &poll_gyr, &init_IMU, NOT_USED },
 };
 
-// I2C地址，根据您的设备更改此地址
-#define MOTOR_I2C_ADDRESS 0x10
-
-BLEUart bleuart;
-
-void setup() {
-  Bluefruit.begin();
-  Bluefruit.Periph.setConnectCallback(connect_callback);
-  Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
-  Bluefruit.setName("Xiao nRF52840");  // 设置设备名称
-  // 开始广告
-  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
-  Bluefruit.Advertising.addTxPower();
-  Bluefruit.Advertising.addName();
-  Bluefruit.Advertising.addService(bleuart);
-  Bluefruit.ScanResponse.addName();
-  Bluefruit.Advertising.restartOnDisconnect(true);
-  Bluefruit.Advertising.setInterval(32, 244); // 设置广告间隔
-  Bluefruit.Advertising.setFastTimeout(30);   // 设置快速广告超时
-  Bluefruit.Advertising.start(0);             // 开始广告
-
-
-  Serial.begin(115200);
-
-
-  // 初始化显示屏
-  Display.SetRotate(180);
-  Display.Init();
-  Display.SetBacklight(100);
-  Display.Clear(WHITE);
-
-  // 初始化I2C
-  Wire.begin();
-
-  Serial.println("Starting initialization...");
-
-  Serial.print("Required sensors: ");
-  Serial.println(EI_CLASSIFIER_FUSION_AXES_STRING);
-
-  if (!ei_connect_fusion_list(EI_CLASSIFIER_FUSION_AXES_STRING)) {
-    Serial.println("ERR: Errors in sensor list detected");
-    return;
-  }
-
-  for (int i = 0; i < fusion_ix; i++) {
-    if (sensors[fusion_sensors[i]].status == NOT_INIT) {
-      sensors[fusion_sensors[i]].status = (sensor_status)sensors[fusion_sensors[i]].init_sensor();
-      if (!sensors[fusion_sensors[i]].status) {
-        Serial.print(sensors[fusion_sensors[i]].name);
-        Serial.println(" axis sensor initialization failed.");
-      } else {
-        Serial.print(sensors[fusion_sensors[i]].name);
-        Serial.println(" axis sensor initialization successful.");
-      }
-    }
-  }
-}
-
-void loop() {
-  Serial.println("\nStarting inferencing in 2 seconds...");
-  delay(2000);
-
-  if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != fusion_ix) {
-    Serial.print("ERR: Sensors don't match the sensors required in the model\n");
-    Serial.print("Following sensors are required: ");
-    Serial.println(EI_CLASSIFIER_FUSION_AXES_STRING);
-    return;
-  }
-
-  Serial.println("Sampling...");
-
-  float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
-
-  for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
-    int64_t next_tick = (int64_t)micros() + ((int64_t)EI_CLASSIFIER_INTERVAL_MS * 1000);
-
-    for (int i = 0; i < fusion_ix; i++) {
-      if (sensors[fusion_sensors[i]].status == INIT) {
-        sensors[fusion_sensors[i]].poll_sensor();
-        sensors[fusion_sensors[i]].status = SAMPLED;
-      }
-      if (sensors[fusion_sensors[i]].status == SAMPLED) {
-        buffer[ix + i] = *sensors[fusion_sensors[i]].value;
-        sensors[fusion_sensors[i]].status = INIT;
-      }
-    }
-
-    int64_t wait_time = next_tick - (int64_t)micros();
-    if (wait_time > 0) {
-      delayMicroseconds(wait_time);
-    }
-  }
-
-  signal_t signal;
-  int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
-  if (err != 0) {
-    Serial.print("ERR: ");
-    Serial.println(err);
-    return;
-  }
-
-  ei_impulse_result_t result = { 0 };
-  err = run_classifier(&signal, &result, false);
-  if (err != EI_IMPULSE_OK) {
-    Serial.print("ERR: ");
-    Serial.println(err);
-    return;
-  }
-
-  Serial.print("Predictions (DSP: ");
-  Serial.print(result.timing.dsp);
-  Serial.print(" ms., Classification: ");
-  Serial.print(result.timing.classification);
-  Serial.print(" ms., Anomaly: ");
-  Serial.print(result.timing.anomaly);
-  Serial.println(" ms.):");
-  display_max_probability_label(result);
-
-  for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-    Serial.print(result.classification[ix].label);
-    Serial.print(": ");
-    Serial.println(result.classification[ix].value);
-
-
-
-    char value_str[10];
-    dtostrf(result.classification[ix].value, 6, 2, value_str);
-  }
-#if EI_CLASSIFIER_HAS_ANOMALY == 1
-  Serial.print("    anomaly score: ");
-  Serial.println(result.anomaly);
-
-
-  char anomaly_str[10];
-  dtostrf(result.anomaly, 6, 2, anomaly_str);
-
-#endif
-
-  delay(1000);  // 主循环延时
-}
-
 static int8_t ei_find_axis(char *axis_name) {
   for (int ix = 0; ix < N_SENSORS; ix++) {
     if (strstr(axis_name, sensors[ix].name)) {
@@ -243,7 +106,6 @@ static int8_t ei_find_axis(char *axis_name) {
   }
   return -1;
 }
-
 
 static bool ei_connect_fusion_list(const char *input_list) {
   char *buff;
@@ -289,6 +151,186 @@ static bool ei_connect_fusion_list(const char *input_list) {
   return is_fusion;
 }
 
+void setup() {
+  Serial.begin(9600);
+  while (!Serial);
+
+  // 初始化蓝牙
+  if (!BLE.begin()) {
+    Serial.println("starting Bluetooth® Low Energy module failed!");
+    while (1);
+  }
+
+  Serial.println("Bluetooth® Low Energy module initialized.");
+
+  BLE.setLocalName("XIAO");
+  BLE.setAdvertisedService(ledService);
+
+  // 添加特征到服务
+  ledService.addCharacteristic(switchCharacteristic);
+  ledService.addCharacteristic(labelCharacteristic); // 添加labelCharacteristic
+
+  // 添加服务
+  BLE.addService(ledService);
+
+  // 设置特征的初始值
+  switchCharacteristic.writeValue(0);
+
+  // 开始广播
+  BLE.advertise();
+
+  Serial.println("Bluetooth device active, waiting for connections...");
+
+  // 初始化显示屏
+  Display.SetRotate(180);
+  Display.Init();
+  Display.SetBacklight(100);
+  Display.Clear(WHITE);
+ 
+  // 初始化I2C
+  Wire.begin();
+
+  Serial.println("Starting initialization...");
+
+  Serial.print("Required sensors: ");
+  Serial.println(EI_CLASSIFIER_FUSION_AXES_STRING);
+
+  if (!ei_connect_fusion_list(EI_CLASSIFIER_FUSION_AXES_STRING)) {
+    Serial.println("ERR: Errors in sensor list detected");
+    return;
+  }
+
+  for (int i = 0; i < fusion_ix; i++) {
+    if (sensors[fusion_sensors[i]].status == NOT_INIT) {
+      sensors[fusion_sensors[i]].status = (sensor_status)sensors[fusion_sensors[i]].init_sensor();
+      if (!sensors[fusion_sensors[i]].status) {
+        Serial.print(sensors[fusion_sensors[i]].name);
+        Serial.println(" axis sensor initialization failed.");
+      } else {
+        Serial.print(sensors[fusion_sensors[i]].name);
+        Serial.println(" axis sensor initialization successful.");
+      }
+    }
+  }
+}
+
+void loop() {
+  // 监听连接的BLE外围设备
+  BLEDevice central = BLE.central();
+
+  // 如果有中央设备连接到外围设备
+  if (central) {
+    Serial.print("Connected to central: ");
+    // 打印中央设备的MAC地址
+    Serial.println(central.address());
+
+    // 在显示屏上显示连接信息
+    Display.Clear(WHITE);
+    Display.DrawString_EN(10, 10, "Connected", &Font20, WHITE, BLACK);
+
+    // 连接后开始推理过程
+    Serial.println("\nStarting inferencing in 2 seconds...");
+    delay(2000);
+
+    while (central.connected()) {
+      // 采集和推理数据
+      if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != fusion_ix) {
+        Serial.print("ERR: Sensors don't match the sensors required in the model\n");
+        Serial.print("Following sensors are required: ");
+        Serial.println(EI_CLASSIFIER_FUSION_AXES_STRING);
+        return;
+      }
+
+      Serial.println("Sampling...");
+
+      float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
+
+      for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
+        int64_t next_tick = (int64_t)micros() + ((int64_t)EI_CLASSIFIER_INTERVAL_MS * 1000);
+
+        for (int i = 0; i < fusion_ix; i++) {
+          if (sensors[fusion_sensors[i]].status == INIT) {
+            sensors[fusion_sensors[i]].poll_sensor();
+            sensors[fusion_sensors[i]].status = SAMPLED;
+          }
+          if (sensors[fusion_sensors[i]].status == SAMPLED) {
+            buffer[ix + i] = *sensors[fusion_sensors[i]].value;
+            sensors[fusion_sensors[i]].status = INIT;
+          }
+        }
+
+        int64_t wait_time = next_tick - (int64_t)micros();
+        if (wait_time > 0) {
+          delayMicroseconds(wait_time);
+        }
+
+        // 定期发送心跳包以保持连接
+        switchCharacteristic.writeValue(1);
+      }
+
+      signal_t signal;
+      int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
+      if (err != 0) {
+        Serial.print("ERR: ");
+        Serial.println(err);
+        return;
+      }
+
+      ei_impulse_result_t result = { 0 };
+      err = run_classifier(&signal, &result, false);
+      if (err != EI_IMPULSE_OK) {
+        Serial.print("ERR: ");
+        Serial.println(err);
+        return;
+      }
+
+      Serial.print("Predictions (DSP: ");
+      Serial.print(result.timing.dsp);
+      Serial.print(" ms., Classification: ");
+      Serial.print(result.timing.classification);
+      Serial.print(" ms., Anomaly: ");
+      Serial.print(result.timing.anomaly);
+      Serial.println(" ms.):");
+      display_max_probability_label(result);
+
+      for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
+        Serial.print(result.classification[ix].label);
+        Serial.print(": ");
+        Serial.println(result.classification[ix].value);
+
+        char value_str[10];
+        dtostrf(result.classification[ix].value, 6, 2, value_str);
+      }
+
+#if EI_CLASSIFIER_HAS_ANOMALY == 1
+      Serial.print("    anomaly score: ");
+      Serial.println(result.anomaly);
+
+      char anomaly_str[10];
+      dtostrf(result.anomaly, 6, 2, anomaly_str);
+#endif
+
+      delay(1000);  // 主循环延时
+
+      // 在每次推理完成后检查连接状态
+      if (!central.connected()) {
+        Serial.println("Central device disconnected during inferencing.");
+        Display.Clear(WHITE);
+        Display.DrawString_EN(10, 10, "Disconnected", &Font20, WHITE, BLACK);
+        return;
+      }
+    }
+
+    // 当中央设备断开连接时，打印出来
+    Serial.print(F("Disconnected from central: "));
+    Serial.println(central.address());
+
+    // 在显示屏上显示断开连接信息
+    Display.Clear(WHITE);
+    Display.DrawString_EN(10, 10, "Disconnected", &Font20, WHITE, BLACK);
+  }
+}
+
 void display_max_probability_label(ei_impulse_result_t result) {
   float max_value = 0.0;
   const char *max_label = nullptr;
@@ -310,23 +352,11 @@ void display_max_probability_label(ei_impulse_result_t result) {
     int text_width = getStringWidth(max_label, &Font20);
     int x_center = (SCREEN_WIDTH - text_width) / 2;                               // 计算居中位置的X坐标
     int y_center = (SCREEN_HEIGHT - Font20.Height) / 2;                           // 计算居中位置的Y坐标
-    Display.DrawString_EN(x_center, y_center, max_label, &Font40, WHITE, BLACK);  // 显示最大可能性的标签
+    Display.DrawString_EN(x_center, y_center, max_label, &Font20, WHITE, BLACK);  // 显示最大可能性的标签
+
     // 通过蓝牙发送 max_label
-    if (bleuart.connected()) {
-      bleuart.print("Max label: ");
-      bleuart.println(max_label);
-
+    labelCharacteristic.writeValue(max_label);
+    Serial.print("Sent via Bluetooth: ");
+    Serial.println(max_label);
   }
-}
-
-// 蓝牙连接回调函数
-void connect_callback(uint16_t conn_handle) {
-  // 蓝牙连接成功时的回调函数
-  Serial.println("Connected!");
-}
-
-// 蓝牙断开连接回调函数
-void disconnect_callback(uint16_t conn_handle, uint8_t reason) {
-  // 蓝牙断开连接时的回调函数
-  Serial.println("Disconnected!");
 }
