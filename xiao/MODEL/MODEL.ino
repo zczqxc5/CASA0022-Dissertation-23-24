@@ -9,6 +9,19 @@
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 280
 
+#define LABEL_COUNT 7
+
+const char* labels[LABEL_COUNT] = { "bye", "curtain", "display", "hello", "light", "music", "other" };
+
+int getLabelId(const char* label) {
+  for (int i = 0; i < LABEL_COUNT; i++) {
+    if (strcmp(labels[i], label) == 0) {
+      return i;
+    }
+  }
+  return -1; // 未找到标签
+}
+
 int getStringWidth(const char *str, const sFONT *font) {
   return strlen(str) * font->Width;
 }
@@ -21,7 +34,7 @@ LSM6DS3 myIMU(I2C_MODE, 0x6A);  // 默认I2C地址0x6A
 
 BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214");  // 自定义服务UUID
 BLEByteCharacteristic switchCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);  // 自定义特征UUID
-BLEStringCharacteristic labelCharacteristic("19B10002-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite, 32); // 定义labelCharacteristic
+BLEIntCharacteristic labelCharacteristic("19B10002-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite); // 定义labelCharacteristic
 
 enum sensor_status {
   NOT_USED = -1,
@@ -153,7 +166,7 @@ static bool ei_connect_fusion_list(const char *input_list) {
 
 void setup() {
   Serial.begin(9600);
-  while (!Serial);
+
 
   // 初始化蓝牙
   if (!BLE.begin()) {
@@ -186,7 +199,7 @@ void setup() {
   Display.Init();
   Display.SetBacklight(100);
   Display.Clear(WHITE);
- 
+
   // 初始化I2C
   Wire.begin();
 
@@ -354,9 +367,12 @@ void display_max_probability_label(ei_impulse_result_t result) {
     int y_center = (SCREEN_HEIGHT - Font20.Height) / 2;                           // 计算居中位置的Y坐标
     Display.DrawString_EN(x_center, y_center, max_label, &Font20, WHITE, BLACK);  // 显示最大可能性的标签
 
-    // 通过蓝牙发送 max_label
-    labelCharacteristic.writeValue(max_label);
-    Serial.print("Sent via Bluetooth: ");
-    Serial.println(max_label);
+    // 将标签转换为数字ID并通过蓝牙发送
+    int labelId = getLabelId(max_label);
+    if (labelId != -1) {
+      labelCharacteristic.writeValue(labelId);
+      Serial.print("Sent via Bluetooth: ");
+      Serial.println(labelId);
+    }
   }
 }
