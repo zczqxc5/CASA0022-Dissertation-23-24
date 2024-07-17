@@ -6,8 +6,6 @@
 #include "seeed.h"
 #include <ArduinoBLE.h>
 
-#define SCREEN_WIDTH 240
-#define SCREEN_HEIGHT 280
 
 #define LABEL_COUNT 7
 
@@ -22,12 +20,8 @@ int getLabelId(const char* label) {
   return -1; // 未找到标签
 }
 
-int getStringWidth(const char *str, const sFONT *font) {
-  return strlen(str) * font->Width;
-}
 
-// 显示屏初始化
-st7789v2 Display;
+
 
 // 初始化传感器对象
 LSM6DS3 myIMU(I2C_MODE, 0x6A);  // 默认I2C地址0x6A
@@ -61,6 +55,12 @@ typedef struct {
 float data[N_SENSORS];
 int8_t fusion_sensors[N_SENSORS];
 int fusion_ix = 0;
+
+float max_value = 0.0;
+const char *max_label = nullptr; // 声明全局变量
+unsigned long previousMillis = 0; // 存储上一次传输的时间
+unsigned long previousSampleMillis = 0; // 存储上一次采样的时间
+const unsigned long sampleInterval = 1000; // 采样间隔
 
 bool init_IMU(void) {
   static bool init_status = false;
@@ -167,12 +167,17 @@ static bool ei_connect_fusion_list(const char *input_list) {
 void setup() {
   Serial.begin(9600);
 
-
   // 初始化蓝牙
   if (!BLE.begin()) {
     Serial.println("starting Bluetooth® Low Energy module failed!");
     while (1);
   }
+
+  // 设置广播间隔
+  BLE.setAdvertisingInterval(32); // 单位为625微秒，32对应20毫秒
+
+  // 设置连接参数：最小连接间隔、最大连接间隔、连接监督超时、从机延迟
+  BLE.setConnectionInterval(6, 12); // 最小连接间隔7.5毫秒，最大连接间隔15毫秒
 
   Serial.println("Bluetooth® Low Energy module initialized.");
 
@@ -188,17 +193,13 @@ void setup() {
 
   // 设置特征的初始值
   switchCharacteristic.writeValue(0);
+  labelCharacteristic.writeValue(1); // 设置初始值1
 
   // 开始广播
   BLE.advertise();
 
   Serial.println("Bluetooth device active, waiting for connections...");
 
-  // 初始化显示屏
-  Display.SetRotate(180);
-  Display.Init();
-  Display.SetBacklight(100);
-  Display.Clear(WHITE);
 
   // 初始化I2C
   Wire.begin();
@@ -228,125 +229,111 @@ void setup() {
 }
 
 void loop() {
-  // 监听连接的BLE外围设备
+  // 处理蓝牙连接
   BLEDevice central = BLE.central();
 
-  // 如果有中央设备连接到外围设备
   if (central) {
-    Serial.print("Connected to central: ");
-    // 打印中央设备的MAC地址
-    Serial.println(central.address());
-
-    // 在显示屏上显示连接信息
-    Display.Clear(WHITE);
-    Display.DrawString_EN(10, 10, "Connected", &Font20, WHITE, BLACK);
-
-    // 连接后开始推理过程
-    Serial.println("\nStarting inferencing in 2 seconds...");
-    delay(2000);
-
-    while (central.connected()) {
-      // 采集和推理数据
-      if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != fusion_ix) {
-        Serial.print("ERR: Sensors don't match the sensors required in the model\n");
-        Serial.print("Following sensors are required: ");
-        Serial.println(EI_CLASSIFIER_FUSION_AXES_STRING);
-        return;
-      }
-
-      Serial.println("Sampling...");
-
-      float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
-
-      for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
-        int64_t next_tick = (int64_t)micros() + ((int64_t)EI_CLASSIFIER_INTERVAL_MS * 1000);
-
-        for (int i = 0; i < fusion_ix; i++) {
-          if (sensors[fusion_sensors[i]].status == INIT) {
-            sensors[fusion_sensors[i]].poll_sensor();
-            sensors[fusion_sensors[i]].status = SAMPLED;
-          }
-          if (sensors[fusion_sensors[i]].status == SAMPLED) {
-            buffer[ix + i] = *sensors[fusion_sensors[i]].value;
-            sensors[fusion_sensors[i]].status = INIT;
-          }
+    if (central.connected()) {
+      // 每2秒更新一次BLE特征值
+      unsigned long currentMillis = millis();
+      if (currentMillis - previousMillis >= 2000) {
+        previousMillis = currentMillis;
+        int labelId = getLabelId(max_label);
+        if (labelId != -1) {
+          labelCharacteristic.writeValue(labelId);
+          Serial.print("Sent via Bluetooth: ");
+          Serial.println(labelId);
         }
+      }
+    } else {
+      Serial.print("Disconnected from central: ");
+      Serial.println(central.address());
+    }
+  }
 
-        int64_t wait_time = next_tick - (int64_t)micros();
-        if (wait_time > 0) {
-          delayMicroseconds(wait_time);
+  // 采集和推理数据
+  unsigned long currentSampleMillis = millis();
+  if (currentSampleMillis - previousSampleMillis >= sampleInterval) {
+    previousSampleMillis = currentSampleMillis;
+
+    if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != fusion_ix) {
+      Serial.print("ERR: Sensors don't match the sensors required in the model\n");
+      Serial.print("Following sensors are required: ");
+      Serial.println(EI_CLASSIFIER_FUSION_AXES_STRING);
+      return;
+    }
+
+    Serial.println("Sampling...");
+
+    float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
+
+    for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
+      int64_t next_tick = (int64_t)micros() + ((int64_t)EI_CLASSIFIER_INTERVAL_MS * 1000);
+
+      for (int i = 0; i < fusion_ix; i++) {
+        if (sensors[fusion_sensors[i]].status == INIT) {
+          sensors[fusion_sensors[i]].poll_sensor();
+          sensors[fusion_sensors[i]].status = SAMPLED;
         }
-
-        // 定期发送心跳包以保持连接
-        switchCharacteristic.writeValue(1);
+        if (sensors[fusion_sensors[i]].status == SAMPLED) {
+          buffer[ix + i] = *sensors[fusion_sensors[i]].value;
+          sensors[fusion_sensors[i]].status = INIT;
+        }
       }
 
-      signal_t signal;
-      int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
-      if (err != 0) {
-        Serial.print("ERR: ");
-        Serial.println(err);
-        return;
-      }
-
-      ei_impulse_result_t result = { 0 };
-      err = run_classifier(&signal, &result, false);
-      if (err != EI_IMPULSE_OK) {
-        Serial.print("ERR: ");
-        Serial.println(err);
-        return;
-      }
-
-      Serial.print("Predictions (DSP: ");
-      Serial.print(result.timing.dsp);
-      Serial.print(" ms., Classification: ");
-      Serial.print(result.timing.classification);
-      Serial.print(" ms., Anomaly: ");
-      Serial.print(result.timing.anomaly);
-      Serial.println(" ms.):");
-      display_max_probability_label(result);
-
-      for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-        Serial.print(result.classification[ix].label);
-        Serial.print(": ");
-        Serial.println(result.classification[ix].value);
-
-        char value_str[10];
-        dtostrf(result.classification[ix].value, 6, 2, value_str);
-      }
-
-#if EI_CLASSIFIER_HAS_ANOMALY == 1
-      Serial.print("    anomaly score: ");
-      Serial.println(result.anomaly);
-
-      char anomaly_str[10];
-      dtostrf(result.anomaly, 6, 2, anomaly_str);
-#endif
-
-      delay(1000);  // 主循环延时
-
-      // 在每次推理完成后检查连接状态
-      if (!central.connected()) {
-        Serial.println("Central device disconnected during inferencing.");
-        Display.Clear(WHITE);
-        Display.DrawString_EN(10, 10, "Disconnected", &Font20, WHITE, BLACK);
-        return;
+      int64_t wait_time = next_tick - (int64_t)micros();
+      if (wait_time > 0) {
+        delayMicroseconds(wait_time);
       }
     }
 
-    // 当中央设备断开连接时，打印出来
-    Serial.print(F("Disconnected from central: "));
-    Serial.println(central.address());
+    signal_t signal;
+    int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
+    if (err != 0) {
+      Serial.print("ERR: ");
+      Serial.println(err);
+      return;
+    }
 
-    // 在显示屏上显示断开连接信息
-    Display.Clear(WHITE);
-    Display.DrawString_EN(10, 10, "Disconnected", &Font20, WHITE, BLACK);
+    ei_impulse_result_t result = { 0 };
+    err = run_classifier(&signal, &result, false);
+    if (err != EI_IMPULSE_OK) {
+      Serial.print("ERR: ");
+      Serial.println(err);
+      return;
+    }
+
+    Serial.print("Predictions (DSP: ");
+    Serial.print(result.timing.dsp);
+    Serial.print(" ms., Classification: ");
+    Serial.print(result.timing.classification);
+    Serial.print(" ms., Anomaly: ");
+    Serial.print(result.timing.anomaly);
+    Serial.println(" ms.):");
+    update_max_probability_label(result);
+
+    for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
+      Serial.print(result.classification[ix].label);
+      Serial.print(": ");
+      Serial.println(result.classification[ix].value);
+
+      char value_str[10];
+      dtostrf(result.classification[ix].value, 6, 2, value_str);
+    }
+
+#if EI_CLASSIFIER_HAS_ANOMALY == 1
+    Serial.print("    anomaly score: ");
+    Serial.println(result.anomaly);
+
+    char anomaly_str[10];
+    dtostrf(result.anomaly, 6, 2, anomaly_str);
+#endif
   }
 }
 
-void display_max_probability_label(ei_impulse_result_t result) {
-  float max_value = 0.0;
-  const char *max_label = nullptr;
+void update_max_probability_label(ei_impulse_result_t result) {
+  max_value = 0.0;
+  max_label = nullptr;
 
   // 找出最大可能性的标签
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
@@ -356,23 +343,6 @@ void display_max_probability_label(ei_impulse_result_t result) {
     }
   }
 
-  // 打印和显示最大可能性的标签
-  if (max_label != nullptr) {
-    Serial.print("Max label: ");
-    Serial.println(max_label);
 
-    Display.Clear(WHITE);  // 清除屏幕，每次显示新结果前清空屏幕
-    int text_width = getStringWidth(max_label, &Font20);
-    int x_center = (SCREEN_WIDTH - text_width) / 2;                               // 计算居中位置的X坐标
-    int y_center = (SCREEN_HEIGHT - Font20.Height) / 2;                           // 计算居中位置的Y坐标
-    Display.DrawString_EN(x_center, y_center, max_label, &Font20, WHITE, BLACK);  // 显示最大可能性的标签
-
-    // 将标签转换为数字ID并通过蓝牙发送
-    int labelId = getLabelId(max_label);
-    if (labelId != -1) {
-      labelCharacteristic.writeValue(labelId);
-      Serial.print("Sent via Bluetooth: ");
-      Serial.println(labelId);
-    }
-  }
+  
 }
