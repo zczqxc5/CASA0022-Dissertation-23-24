@@ -46,13 +46,13 @@ void loop() {
         Serial.println("已连接");
 
         // 增加一个延迟，确保设备有足够的时间来准备发现属性
-        delay(60000); // 2秒延迟
+        delay(10000); // 10秒延迟
 
         // 发现外围设备的属性
         Serial.println("发现属性中 ...");
         bool attributesDiscovered = false;
         unsigned long discoveryStartTime = millis();
-        const unsigned long discoveryTimeout = 60000; // 10秒超时时间
+        const unsigned long discoveryTimeout = 100000; // 60秒超时时间
 
         // 尝试在一定时间内发现属性
         while (!attributesDiscovered && (millis() - discoveryStartTime < discoveryTimeout)) {
@@ -74,30 +74,51 @@ void loop() {
               }
             }
 
-            // 尝试读取特性值
-            BLECharacteristic switchCharacteristic = peripheral.characteristic(SWITCH_CHARACTERISTIC_UUID);
-            if (switchCharacteristic) {
-              Serial.println("发现开关特性");
-              if (switchCharacteristic.canRead()) {
-                Serial.println("读取开关特性值...");
-                uint8_t value;
-                if (switchCharacteristic.readValue(value)) {
-                  Serial.print("开关特性值: ");
-                  Serial.println(value);
-                } else {
-                  Serial.println("读取开关特性值失败！");
-                }
-              } else {
-                Serial.println("开关特性不可读");
-              }
-            } else {
-              Serial.println("未找到开关特性");
-            }
-
           } else {
             Serial.println("属性发现失败，再次尝试...");
             delay(1000); // 延迟1秒后再次尝试
           }
+        }
+
+        if (!attributesDiscovered) {
+          Serial.println("无法发现所有属性，断开连接...");
+          peripheral.disconnect();
+          return;
+        }
+
+        // 尝试读取开关特性值，增加60秒时间重复尝试
+        bool characteristicFound = false;
+        unsigned long readStartTime = millis();
+        const unsigned long readTimeout = 60000; // 60秒超时时间
+
+        while (!characteristicFound && (millis() - readStartTime < readTimeout)) {
+          BLECharacteristic switchCharacteristic = peripheral.characteristic(SWITCH_CHARACTERISTIC_UUID);
+          if (switchCharacteristic) {
+            Serial.println("发现开关特性");
+            if (switchCharacteristic.canRead()) {
+              Serial.println("读取开关特性值...");
+              uint8_t value;
+              if (switchCharacteristic.readValue(value)) {
+                Serial.print("开关特性值: ");
+                Serial.println(value);
+                characteristicFound = true;
+              } else {
+                Serial.println("读取开关特性值失败！");
+              }
+            } else {
+              Serial.println("开关特性不可读");
+              characteristicFound = true; // 如果特性存在但不可读，就不再尝试
+            }
+          } else {
+            Serial.println("未找到开关特性，尝试再次发现...");
+            delay(1000); // 延迟1秒后再次尝试
+          }
+        }
+
+        if (!characteristicFound) {
+          Serial.println("无法找到或读取开关特性，断开连接...");
+          peripheral.disconnect();
+          return;
         }
 
         // 保持连接状态
@@ -106,16 +127,14 @@ void loop() {
           Serial.println("保持连接...");
 
           // 每次循环读取一次特性值
-          if (attributesDiscovered) {
-            BLECharacteristic switchCharacteristic = peripheral.characteristic(SWITCH_CHARACTERISTIC_UUID);
-            if (switchCharacteristic && switchCharacteristic.canRead()) {
-              uint8_t value;
-              if (switchCharacteristic.readValue(value)) {
-                Serial.print("实时开关特性值: ");
-                Serial.println(value);
-              } else {
-                Serial.println("读取开关特性值失败！");
-              }
+          BLECharacteristic switchCharacteristic = peripheral.characteristic(SWITCH_CHARACTERISTIC_UUID);
+          if (switchCharacteristic && switchCharacteristic.canRead()) {
+            uint8_t value;
+            if (switchCharacteristic.readValue(value)) {
+              Serial.print("实时开关特性值: ");
+              Serial.println(value);
+            } else {
+              Serial.println("读取开关特性值失败！");
             }
           }
         }

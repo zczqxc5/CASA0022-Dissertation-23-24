@@ -6,7 +6,6 @@
 #include "seeed.h"
 #include <ArduinoBLE.h>
 
-
 #define LABEL_COUNT 7
 
 const char* labels[LABEL_COUNT] = { "bye", "curtain", "display", "hello", "light", "music", "other" };
@@ -19,9 +18,6 @@ int getLabelId(const char* label) {
   }
   return -1; // 未找到标签
 }
-
-
-
 
 // 初始化传感器对象
 LSM6DS3 myIMU(I2C_MODE, 0x6A);  // 默认I2C地址0x6A
@@ -200,7 +196,6 @@ void setup() {
 
   Serial.println("Bluetooth device active, waiting for connections...");
 
-
   // 初始化I2C
   Wire.begin();
 
@@ -229,12 +224,10 @@ void setup() {
 }
 
 void loop() {
-  // 处理蓝牙连接
   BLEDevice central = BLE.central();
 
   if (central) {
     if (central.connected()) {
-      // 每2秒更新一次BLE特征值
       unsigned long currentMillis = millis();
       if (currentMillis - previousMillis >= 2000) {
         previousMillis = currentMillis;
@@ -251,7 +244,6 @@ void loop() {
     }
   }
 
-  // 采集和推理数据
   unsigned long currentSampleMillis = millis();
   if (currentSampleMillis - previousSampleMillis >= sampleInterval) {
     previousSampleMillis = currentSampleMillis;
@@ -316,17 +308,11 @@ void loop() {
       Serial.print(result.classification[ix].label);
       Serial.print(": ");
       Serial.println(result.classification[ix].value);
-
-      char value_str[10];
-      dtostrf(result.classification[ix].value, 6, 2, value_str);
     }
 
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
     Serial.print("    anomaly score: ");
     Serial.println(result.anomaly);
-
-    char anomaly_str[10];
-    dtostrf(result.anomaly, 6, 2, anomaly_str);
 #endif
   }
 }
@@ -343,6 +329,9 @@ void update_max_probability_label(ei_impulse_result_t result) {
     }
   }
 
-
-  
+  // 打印最大可能性的标签
+  if (max_label != nullptr) {
+    Serial.print("Max label: ");
+    Serial.println(max_label);
+  }
 }
