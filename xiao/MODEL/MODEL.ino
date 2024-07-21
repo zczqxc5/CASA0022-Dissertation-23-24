@@ -22,9 +22,9 @@ int getLabelId(const char* label) {
 // 初始化传感器对象
 LSM6DS3 myIMU(I2C_MODE, 0x6A);  // 默认I2C地址0x6A
 
-BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214");  // 自定义服务UUID
-BLEByteCharacteristic switchCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);  // 自定义特征UUID
-BLEIntCharacteristic labelCharacteristic("19B10002-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite); // 定义labelCharacteristic
+BLEService ledService("19b10000-e8f2-537e-4f6c-d104768a1214");  // 自定义服务UUID
+
+BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite); // 定义labelCharacteristic
 
 enum sensor_status {
   NOT_USED = -1,
@@ -53,7 +53,7 @@ int8_t fusion_sensors[N_SENSORS];
 int fusion_ix = 0;
 
 float max_value = 0.0;
-const char *max_label = nullptr; // 声明全局变量
+const char *max_label = "bye"; // 声明全局变量
 unsigned long previousMillis = 0; // 存储上一次传输的时间
 unsigned long previousSampleMillis = 0; // 存储上一次采样的时间
 const unsigned long sampleInterval = 1000; // 采样间隔
@@ -181,15 +181,13 @@ void setup() {
   BLE.setAdvertisedService(ledService);
 
   // 添加特征到服务
-  ledService.addCharacteristic(switchCharacteristic);
   ledService.addCharacteristic(labelCharacteristic); // 添加labelCharacteristic
 
   // 添加服务
   BLE.addService(ledService);
 
   // 设置特征的初始值
-  switchCharacteristic.writeValue(0);
-  labelCharacteristic.writeValue(1); // 设置初始值1
+  labelCharacteristic.writeValue(0); // 设置初始值为0
 
   // 开始广播
   BLE.advertise();
@@ -277,6 +275,9 @@ void loop() {
       if (wait_time > 0) {
         delayMicroseconds(wait_time);
       }
+
+      // Non-blocking BLE handling
+      BLE.poll();
     }
 
     signal_t signal;
@@ -319,7 +320,7 @@ void loop() {
 
 void update_max_probability_label(ei_impulse_result_t result) {
   max_value = 0.0;
-  max_label = nullptr;
+  max_label = "bye";
 
   // 找出最大可能性的标签
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {

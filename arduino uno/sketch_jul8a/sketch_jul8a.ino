@@ -2,7 +2,7 @@
 
 // 自定义服务和特征UUID
 #define SERVICE_UUID "19B10000-E8F2-537E-4F6C-D104768A1214"
-#define SWITCH_CHARACTERISTIC_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"
+#define SWITCH_CHARACTERISTIC_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
 
 void setup() {
   Serial.begin(9600);
@@ -52,7 +52,7 @@ void loop() {
         Serial.println("发现属性中 ...");
         bool attributesDiscovered = false;
         unsigned long discoveryStartTime = millis();
-        const unsigned long discoveryTimeout = 100000; // 60秒超时时间
+        const unsigned long discoveryTimeout = 60000; // 60秒超时时间
 
         // 尝试在一定时间内发现属性
         while (!attributesDiscovered && (millis() - discoveryStartTime < discoveryTimeout)) {
@@ -89,7 +89,7 @@ void loop() {
         // 尝试读取开关特性值，增加60秒时间重复尝试
         bool characteristicFound = false;
         unsigned long readStartTime = millis();
-        const unsigned long readTimeout = 60000; // 60秒超时时间
+        const unsigned long readTimeout = 200000; // 60秒超时时间
 
         while (!characteristicFound && (millis() - readStartTime < readTimeout)) {
           BLECharacteristic switchCharacteristic = peripheral.characteristic(SWITCH_CHARACTERISTIC_UUID);
