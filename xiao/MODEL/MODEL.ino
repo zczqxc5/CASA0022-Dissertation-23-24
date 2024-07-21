@@ -54,9 +54,15 @@ int fusion_ix = 0;
 
 float max_value = 0.0;
 const char *max_label = "bye"; // 声明全局变量
+const char *previous_label = ""; // 存储之前的标签
 unsigned long previousMillis = 0; // 存储上一次传输的时间
 unsigned long previousSampleMillis = 0; // 存储上一次采样的时间
+unsigned long previousDisplayMillis = 0; // 存储上一次屏幕显示的时间
 const unsigned long sampleInterval = 1000; // 采样间隔
+const unsigned long displayInterval = 2000; // 屏幕显示间隔
+
+// 显示屏初始化
+st7789v2 Display;
 
 bool init_IMU(void) {
   static bool init_status = false;
@@ -219,6 +225,12 @@ void setup() {
       }
     }
   }
+
+  // 初始化显示屏
+  Display.SetRotate(180); // 设置屏幕旋转90度
+  Display.Init();
+  Display.SetBacklight(100);
+  Display.Clear(WHITE);
 }
 
 void loop() {
@@ -316,6 +328,14 @@ void loop() {
     Serial.println(result.anomaly);
 #endif
   }
+
+  // 更新显示屏
+  unsigned long currentDisplayMillis = millis();
+  if (currentDisplayMillis - previousDisplayMillis >= displayInterval && strcmp(max_label, previous_label) != 0) {
+    previousDisplayMillis = currentDisplayMillis;
+    updateDisplay(max_label);
+    previous_label = max_label;
+  }
 }
 
 void update_max_probability_label(ei_impulse_result_t result) {
@@ -335,4 +355,14 @@ void update_max_probability_label(ei_impulse_result_t result) {
     Serial.print("Max label: ");
     Serial.println(max_label);
   }
+}
+
+void updateDisplay(const char* label) {
+  Display.Clear(WHITE);
+
+  // 计算文本位置以居中显示
+  int x = (240 - strlen(label) * 10) / 2; // 假设每个字符宽度为10
+  int y = (240 - 20) / 2; // 假设字符高度为20
+
+  Display.DrawString_EN(x, y, label, &Font20, WHITE, BLACK);
 }
