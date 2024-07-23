@@ -4,10 +4,23 @@
 #define SERVICE_UUID "19B10000-E8F2-537E-4F6C-D104768A1214"
 #define SWITCH_CHARACTERISTIC_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
 
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+ #include <avr/power.h>
+#endif
+
+#define PIN        6
+#define NUMPIXELS 24
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
+bool ledState = true; // 初始化LED状态为开
+const char* labels[] = {"bye", "curtain", "display", "hello", "light", "music", "other"};
+
+String lastValue = ""; // 记录上次的特性值
+
 void setup() {
   Serial.begin(9600);
-  while (!Serial);
-
+  
   // 初始化蓝牙模块
   if (!BLE.begin()) {
     Serial.println("启动蓝牙低能耗模块失败！");
@@ -18,6 +31,13 @@ void setup() {
 
   // 开始扫描外围设备
   BLE.scan();
+
+#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+
+  pixels.begin();
+  setLedState(true); // 初始化为开
 }
 
 void loop() {
@@ -100,7 +120,7 @@ void loop() {
               uint8_t value;
               if (switchCharacteristic.readValue(value)) {
                 Serial.print("开关特性值: ");
-                Serial.println(value);
+                Serial.println(labels[value]);
                 characteristicFound = true;
               } else {
                 Serial.println("读取开关特性值失败！");
@@ -132,7 +152,15 @@ void loop() {
             uint8_t value;
             if (switchCharacteristic.readValue(value)) {
               Serial.print("实时开关特性值: ");
-              Serial.println(value);
+              Serial.println(labels[value]);
+              
+              // 检查当前值和上次值是否不同
+              if (labels[value] == String("light") && lastValue != "light") {
+                toggleLed();
+              }
+              
+              // 更新lastValue
+              lastValue = labels[value];
             } else {
               Serial.println("读取开关特性值失败！");
             }
@@ -148,4 +176,20 @@ void loop() {
       }
     }
   }
+}
+
+void setLedState(bool state) {
+  if (state) {
+    for(int i = 0; i < NUMPIXELS; i++) {
+      pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+    }
+  } else {
+    pixels.clear();
+  }
+  pixels.show();
+  ledState = state;
+}
+
+void toggleLed() {
+  setLedState(!ledState);
 }
