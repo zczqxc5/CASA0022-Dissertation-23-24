@@ -33,7 +33,6 @@ enum sensor_status {
   SAMPLED
 };
 
-/** Struct to link sensor axis name to sensor value function */
 typedef struct {
   const char *name;
   float *value;
@@ -42,9 +41,8 @@ typedef struct {
   sensor_status status;
 } eiSensors;
 
-/* Constant defines -------------------------------------------------------- */
 #define CONVERT_G_TO_MS2 9.80665f
-#define MAX_ACCEPTED_RANGE 2.0f
+#define DEG_TO_RAD 0.0174533f
 #define N_SENSORS 6
 #define EI_CLASSIFIER_FUSION_AXES_STRING "accX + accY + accZ + gyrX + gyrY + gyrZ"
 
@@ -53,15 +51,14 @@ int8_t fusion_sensors[N_SENSORS];
 int fusion_ix = 0;
 
 float max_value = 0.0;
-const char *max_label = "bye"; // 声明全局变量
-const char *previous_label = ""; // 存储之前的标签
-unsigned long previousMillis = 0; // 存储上一次传输的时间
-unsigned long previousSampleMillis = 0; // 存储上一次采样的时间
-unsigned long previousDisplayMillis = 0; // 存储上一次屏幕显示的时间
-const unsigned long sampleInterval = 1000; // 采样间隔
-const unsigned long displayInterval = 2000; // 屏幕显示间隔
+const char *max_label = "bye";
+const char *previous_label = "";
+unsigned long previousMillis = 0;
+unsigned long previousSampleMillis = 0;
+unsigned long previousDisplayMillis = 0;
+const unsigned long sampleInterval = 2500;
+const unsigned long displayInterval = 2000;
 
-// 显示屏初始化
 st7789v2 Display;
 
 bool init_IMU(void) {
@@ -78,32 +75,19 @@ bool init_IMU(void) {
 }
 
 uint8_t poll_acc(void) {
-  data[0] = myIMU.readFloatAccelX();
-  data[1] = myIMU.readFloatAccelY();
-  data[2] = myIMU.readFloatAccelZ();
-
-  for (int i = 0; i < 3; i++) {
-    if (fabs(data[i]) > MAX_ACCEPTED_RANGE) {
-      data[i] = (data[i] > 0 ? 1 : -1) * MAX_ACCEPTED_RANGE;
-    }
-  }
-
-  data[0] *= CONVERT_G_TO_MS2;
-  data[1] *= CONVERT_G_TO_MS2;
-  data[2] *= CONVERT_G_TO_MS2;
-
+  data[0] = myIMU.readFloatAccelX() * CONVERT_G_TO_MS2;
+  data[1] = myIMU.readFloatAccelY() * CONVERT_G_TO_MS2;
+  data[2] = myIMU.readFloatAccelZ() * CONVERT_G_TO_MS2;
   return 0;
 }
 
 uint8_t poll_gyr(void) {
-  data[3] = myIMU.readFloatGyroX();
-  data[4] = myIMU.readFloatGyroY();
-  data[5] = myIMU.readFloatGyroZ();
-
+  data[3] = myIMU.readFloatGyroX() * DEG_TO_RAD;
+  data[4] = myIMU.readFloatGyroY() * DEG_TO_RAD;
+  data[5] = myIMU.readFloatGyroZ() * DEG_TO_RAD;
   return 0;
 }
 
-/** Used sensors value function connected to label name */
 eiSensors sensors[] = {
   { "accX", &data[0], &poll_acc, &init_IMU, NOT_USED },
   { "accY", &data[1], &poll_acc, &init_IMU, NOT_USED },
@@ -126,7 +110,6 @@ static bool ei_connect_fusion_list(const char *input_list) {
   char *buff;
   bool is_fusion = false;
 
-  /* Copy const string in heap mem */
   char *input_string = (char *)ei_malloc(strlen(input_list) + 1);
   if (input_string == NULL) {
     Serial.println("Error allocating memory for input_string");
@@ -135,12 +118,11 @@ static bool ei_connect_fusion_list(const char *input_list) {
   memset(input_string, 0, strlen(input_list) + 1);
   strncpy(input_string, input_list, strlen(input_list));
 
-  /* Clear fusion sensor list */
   memset(fusion_sensors, 0, N_SENSORS);
   fusion_ix = 0;
 
   buff = strtok(input_string, "+");
-  while (buff != NULL) { /* Run through buffer */
+  while (buff != NULL) {
     int8_t found_axis = ei_find_axis(buff);
     Serial.print("Checking axis: ");
     Serial.println(buff);
@@ -169,38 +151,27 @@ static bool ei_connect_fusion_list(const char *input_list) {
 void setup() {
   Serial.begin(9600);
 
-  // 初始化蓝牙
   if (!BLE.begin()) {
     Serial.println("starting Bluetooth® Low Energy module failed!");
     while (1);
   }
 
-  // 设置广播间隔
-  BLE.setAdvertisingInterval(32); // 单位为625微秒，32对应20毫秒
-
-  // 设置连接参数：最小连接间隔、最大连接间隔、连接监督超时、从机延迟
-  BLE.setConnectionInterval(6, 12); // 最小连接间隔7.5毫秒，最大连接间隔15毫秒
+  BLE.setAdvertisingInterval(32);
+  BLE.setConnectionInterval(6, 12);
 
   Serial.println("Bluetooth® Low Energy module initialized.");
 
   BLE.setLocalName("XIAO");
   BLE.setAdvertisedService(ledService);
 
-  // 添加特征到服务
-  ledService.addCharacteristic(labelCharacteristic); // 添加labelCharacteristic
-
-  // 添加服务
+  ledService.addCharacteristic(labelCharacteristic);
   BLE.addService(ledService);
 
-  // 设置特征的初始值
-  labelCharacteristic.writeValue(0); // 设置初始值为0
-
-  // 开始广播
+  labelCharacteristic.writeValue(0);
   BLE.advertise();
 
   Serial.println("Bluetooth device active, waiting for connections...");
 
-  // 初始化I2C
   Wire.begin();
 
   Serial.println("Starting initialization...");
@@ -226,8 +197,7 @@ void setup() {
     }
   }
 
-  // 初始化显示屏
-  Display.SetRotate(180); // 设置屏幕旋转90度
+  Display.SetRotate(180);
   Display.Init();
   Display.SetBacklight(100);
   Display.Clear(WHITE);
@@ -288,7 +258,6 @@ void loop() {
         delayMicroseconds(wait_time);
       }
 
-      // Non-blocking BLE handling
       BLE.poll();
     }
 
@@ -329,7 +298,6 @@ void loop() {
 #endif
   }
 
-  // 更新显示屏
   unsigned long currentDisplayMillis = millis();
   if (currentDisplayMillis - previousDisplayMillis >= displayInterval && strcmp(max_label, previous_label) != 0) {
     previousDisplayMillis = currentDisplayMillis;
@@ -342,7 +310,6 @@ void update_max_probability_label(ei_impulse_result_t result) {
   max_value = 0.0;
   max_label = "bye";
 
-  // 找出最大可能性的标签
   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
     if (result.classification[ix].value > max_value) {
       max_value = result.classification[ix].value;
@@ -350,7 +317,6 @@ void update_max_probability_label(ei_impulse_result_t result) {
     }
   }
 
-  // 打印最大可能性的标签
   if (max_label != nullptr) {
     Serial.print("Max label: ");
     Serial.println(max_label);
@@ -360,9 +326,8 @@ void update_max_probability_label(ei_impulse_result_t result) {
 void updateDisplay(const char* label) {
   Display.Clear(WHITE);
 
-  // 计算文本位置以居中显示
-  int x = (240 - strlen(label) * 10) / 2; // 假设每个字符宽度为10
-  int y = (240 - 20) / 2; // 假设字符高度为20
+  int x = (240 - strlen(label) * 10) / 2;
+  int y = (240 - 20) / 2;
 
   Display.DrawString_EN(x, y, label, &Font20, WHITE, BLACK);
 }
