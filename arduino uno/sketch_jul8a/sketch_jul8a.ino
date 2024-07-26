@@ -2,6 +2,15 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <ESP32Servo.h> // 添加包含 ESP32Servo 库
+
+// 添加全局变量
+Servo myServo;
+int servoPosition = 0; // 0 表示 0°，1 表示 180°
+String lastValue = ""; // 上一次读取的特征值
+int ledPin = 19; // 假设LED连接到GPIO 2
+bool ledState = false; // false 表示关，true 表示开
+
 
 // 定义服务和特征值UUID
 static BLEUUID serviceUUID("19b10000-e8f2-537e-4f6c-d104768a1214");
@@ -80,9 +89,10 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 };
 
 void setup() {
+  myServo.attach(18); // 假设舵机连接到引脚9
   Serial.begin(115200);
   BLEDevice::init("");
-
+pinMode(ledPin, OUTPUT); // 设置LED引脚为输出模式
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setInterval(1349);
@@ -144,22 +154,34 @@ void handleCharacteristicValue(const String& value) {
   Serial.print("Handling value: ");
   Serial.println(value);
 
-  // 处理特征值变化逻辑，例如控制LED或舵机
-  if (value == "light") {
-    // 处理light逻辑，例如切换LED
-    toggleLed();
-  } else if (value == "curtain") {
-    // 处理curtain逻辑，例如控制舵机
-    toggleCurtain();
+  // 检查当前值是否不同于上次读取的值
+  if (value != lastValue) {
+    lastValue = value; // 更新上次读取的值
+    if (value == "curtain") {
+      toggleCurtain();
+    } else if (value == "light") {
+      toggleLed();
+    }
+  } else {
+    Serial.println("Value is the same as the last one, no action taken.");
   }
 }
 
-void toggleLed() {
-  // 这里添加切换LED的逻辑
-  Serial.println("Toggling LED...");
+void toggleCurtain() {
+  // 每次切换舵机的位置（0° 或 180°）
+  if (servoPosition == 0) {
+    myServo.write(180);
+    servoPosition = 1;
+  } else {
+    myServo.write(0);
+    servoPosition = 0;
+  }
+  Serial.println("Toggling Curtain...");
 }
 
-void toggleCurtain() {
-  // 这里添加控制舵机的逻辑
-  Serial.println("Toggling Curtain...");
+void toggleLed() {
+  // 切换LED的状态（开或关）
+  ledState = !ledState;
+  digitalWrite(ledPin, ledState ? HIGH : LOW);
+  Serial.println("Toggling LED...");
 }
