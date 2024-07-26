@@ -8,7 +8,7 @@
 
 #define LABEL_COUNT 7
 
-const char* labels[LABEL_COUNT] = { "bye", "curtain", "display", "hello", "light", "music", "other" };
+const char* labels[LABEL_COUNT] = { "bye", "cuetain", "display", "hello", "light", "music", "other" };
 
 int getLabelId(const char* label) {
   for (int i = 0; i < LABEL_COUNT; i++) {
@@ -57,7 +57,7 @@ unsigned long previousMillis = 0;
 unsigned long previousSampleMillis = 0;
 unsigned long previousDisplayMillis = 0;
 const unsigned long sampleInterval = 2500;
-const unsigned long displayInterval = 2000;
+const unsigned long displayInterval = 1000;
 
 st7789v2 Display;
 
@@ -209,7 +209,7 @@ void loop() {
   if (central) {
     if (central.connected()) {
       unsigned long currentMillis = millis();
-      if (currentMillis - previousMillis >= 2000) {
+      if (currentMillis - previousMillis >= 2500) {
         previousMillis = currentMillis;
         int labelId = getLabelId(max_label);
         if (labelId != -1) {
@@ -301,7 +301,7 @@ void loop() {
   unsigned long currentDisplayMillis = millis();
   if (currentDisplayMillis - previousDisplayMillis >= displayInterval && strcmp(max_label, previous_label) != 0) {
     previousDisplayMillis = currentDisplayMillis;
-    updateDisplay(max_label);
+    
     previous_label = max_label;
   }
 }
