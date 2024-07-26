@@ -2,6 +2,7 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <BLEServer.h>  // 添加BLEServer头文件
 #include <ESP32Servo.h>  // 添加包含 ESP32Servo 库
 #include "DHT.h"
 
@@ -15,12 +16,20 @@ String lastValue = "";  // 上一次读取的特征值
 int ledPin = 19;        // 假设LED连接到GPIO 2
 bool ledState = false;  // false 表示关，true 表示开
 
-
 // 定义服务和特征值UUID
 static BLEUUID serviceUUID("19b10000-e8f2-537e-4f6c-d104768a1214");
 static BLEUUID charUUID("19b10002-e8f2-537e-4f6c-d104768a1214");
+static BLEUUID temperatureCharUUID("19b10003-e8f2-537e-4f6c-d104768a1214"); // 温度特征值UUID
+static BLEUUID humidityCharUUID("19b10004-e8f2-537e-4f6c-d104768a1214");    // 湿度特征值UUID
+
+// Peripheral变量
+BLEServer* pServer = NULL;
+BLECharacteristic* pCharacteristic = NULL;
 
 // 全局变量
+BLECharacteristic* pTemperatureCharacteristic = NULL; // 温度特征值变量
+BLECharacteristic* pHumidityCharacteristic = NULL;    // 湿度特征值变量
+
 BLEClient* pClient;
 BLEScan* pBLEScan;
 bool doConnect = false;
@@ -95,17 +104,62 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   }
 };
 
+// Peripheral回调函数
+class MyServerCallbacks: public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    Serial.println("Peripheral connected");
+  }
+
+  void onDisconnect(BLEServer* pServer) {
+    Serial.println("Peripheral disconnected");
+  }
+};
+
 void setup() {
-  myServo.attach(18);  // 假设舵机连接到引脚9
+  myServo.attach(18);  // 假设舵机连接到引脚18
   Serial.begin(115200);
   BLEDevice::init("");
   pinMode(ledPin, OUTPUT);  // 设置LED引脚为输出模式
+
+  // Central setup
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setInterval(1349);
   pBLEScan->setWindow(449);
   pBLEScan->setActiveScan(true);
   pBLEScan->start(5, false);
+
+  // Peripheral setup
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(serviceUUID);
+  pCharacteristic = pService->createCharacteristic(
+    
+                      charUUID,
+                      BLECharacteristic::PROPERTY_READ |
+                      BLECharacteristic::PROPERTY_WRITE
+                    );
+
+  pCharacteristic->setValue("Hello from ESP32 Peripheral");
+
+   // 新增温度特征值
+  pTemperatureCharacteristic = pService->createCharacteristic(
+                                  temperatureCharUUID,
+                                  BLECharacteristic::PROPERTY_READ |
+                                  BLECharacteristic::PROPERTY_NOTIFY
+                                );
+
+  // 新增湿度特征值
+  pHumidityCharacteristic = pService->createCharacteristic(
+                                humidityCharUUID,
+                                BLECharacteristic::PROPERTY_READ |
+                                BLECharacteristic::PROPERTY_NOTIFY
+                              );
+
+
+  pService->start();
+  pServer->getAdvertising()->start();
 }
 
 void loop() {
@@ -198,6 +252,7 @@ void toggleLed() {
   digitalWrite(ledPin, ledState ? HIGH : LOW);
   Serial.println("Toggling LED...");
 }
+
 void readData() {
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
@@ -215,4 +270,12 @@ void readData() {
   Serial.print("湿度: ");
   Serial.print(humidity);
   Serial.println(" %");
+
+  // 将温度数据写入温度特征值
+  pTemperatureCharacteristic->setValue((uint8_t*)&temperature, sizeof(float));
+  pTemperatureCharacteristic->notify(); // 如果客户端订阅了通知，则发送通知
+
+  // 将湿度数据写入湿度特征值
+  pHumidityCharacteristic->setValue((uint8_t*)&humidity, sizeof(float));
+  pHumidityCharacteristic->notify(); // 如果客户端订阅了通知，则发送通知
 }
