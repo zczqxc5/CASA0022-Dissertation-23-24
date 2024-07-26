@@ -2,14 +2,18 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
-#include <ESP32Servo.h> // 添加包含 ESP32Servo 库
+#include <ESP32Servo.h>  // 添加包含 ESP32Servo 库
+#include "DHT.h"
 
+#define DHTPIN 21      // 定义DHT22连接的GPIO引脚
+#define DHTTYPE DHT22  // 定义传感器类型DHT22
+DHT dht(DHTPIN, DHTTYPE);
 // 添加全局变量
 Servo myServo;
-int servoPosition = 0; // 0 表示 0°，1 表示 180°
-String lastValue = ""; // 上一次读取的特征值
-int ledPin = 19; // 假设LED连接到GPIO 2
-bool ledState = false; // false 表示关，true 表示开
+int servoPosition = 0;  // 0 表示 0°，1 表示 180°
+String lastValue = "";  // 上一次读取的特征值
+int ledPin = 19;        // 假设LED连接到GPIO 2
+bool ledState = false;  // false 表示关，true 表示开
 
 
 // 定义服务和特征值UUID
@@ -24,75 +28,78 @@ bool connected = false;
 bool doScan = false;
 BLERemoteCharacteristic* pRemoteCharacteristic;
 BLEAdvertisedDevice* myDevice;
-const char* labels[] = {"bye", "curtain", "display", "hello", "light", "music", "other"};
+const char* labels[] = { "bye", "curtain", "display", "hello", "light", "music", "other" };
+
+unsigned long previousMillis = 0;  // 记录上一次读取的时间
+const long interval = 5000;        // 读取间隔时间（5秒）
 
 class MyClientCallback : public BLEClientCallbacks {
-    void onConnect(BLEClient* pclient) {
-    }
+  void onConnect(BLEClient* pclient) {
+  }
 
-    void onDisconnect(BLEClient* pclient) {
-      connected = false;
-      Serial.println("Disconnected");
-    }
+  void onDisconnect(BLEClient* pclient) {
+    connected = false;
+    Serial.println("Disconnected");
+  }
 };
 
 bool connectToServer() {
-    Serial.print("Forming a connection to ");
-    Serial.println(myDevice->getAddress().toString().c_str());
+  Serial.print("Forming a connection to ");
+  Serial.println(myDevice->getAddress().toString().c_str());
 
-    pClient = BLEDevice::createClient();
-    Serial.println(" - Created client");
+  pClient = BLEDevice::createClient();
+  Serial.println(" - Created client");
 
-    pClient->setClientCallbacks(new MyClientCallback());
+  pClient->setClientCallbacks(new MyClientCallback());
 
-    // Connect to the remote BLE Server.
-    pClient->connect(myDevice);
-    Serial.println(" - Connected to server");
+  // Connect to the remote BLE Server.
+  pClient->connect(myDevice);
+  Serial.println(" - Connected to server");
 
-    // Obtain a reference to the service we are after in the remote BLE server.
-    BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
-    if (pRemoteService == nullptr) {
-      Serial.print("Failed to find our service UUID: ");
-      Serial.println(serviceUUID.toString().c_str());
-      pClient->disconnect();
-      return false;
-    }
-    Serial.println(" - Found our service");
+  // Obtain a reference to the service we are after in the remote BLE server.
+  BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
+  if (pRemoteService == nullptr) {
+    Serial.print("Failed to find our service UUID: ");
+    Serial.println(serviceUUID.toString().c_str());
+    pClient->disconnect();
+    return false;
+  }
+  Serial.println(" - Found our service");
 
-    // Obtain a reference to the characteristic in the service of the remote BLE server.
-    pRemoteCharacteristic = pRemoteService->getCharacteristic(charUUID);
-    if (pRemoteCharacteristic == nullptr) {
-      Serial.print("Failed to find our characteristic UUID: ");
-      Serial.println(charUUID.toString().c_str());
-      pClient->disconnect();
-      return false;
-    }
-    Serial.println(" - Found our characteristic");
+  // Obtain a reference to the characteristic in the service of the remote BLE server.
+  pRemoteCharacteristic = pRemoteService->getCharacteristic(charUUID);
+  if (pRemoteCharacteristic == nullptr) {
+    Serial.print("Failed to find our characteristic UUID: ");
+    Serial.println(charUUID.toString().c_str());
+    pClient->disconnect();
+    return false;
+  }
+  Serial.println(" - Found our characteristic");
 
-    return true;
+  return true;
 }
 
-class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-    void onResult(BLEAdvertisedDevice advertisedDevice) {
-      Serial.print("Advertised Device Found: ");
-      Serial.println(advertisedDevice.toString().c_str());
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+  void onResult(BLEAdvertisedDevice advertisedDevice) {
+    Serial.print("Advertised Device Found: ");
+    Serial.println(advertisedDevice.toString().c_str());
 
-      if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(serviceUUID)) {
-        Serial.print("Found our device!  address: ");
-        Serial.println(advertisedDevice.getAddress().toString().c_str());
-        BLEDevice::getScan()->stop();
-        myDevice = new BLEAdvertisedDevice(advertisedDevice);
-        doConnect = true;
-        doScan = true;
-      } 
+    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(serviceUUID)) {
+      Serial.print("Found our device!  address: ");
+      Serial.println(advertisedDevice.getAddress().toString().c_str());
+      BLEDevice::getScan()->stop();
+      myDevice = new BLEAdvertisedDevice(advertisedDevice);
+      doConnect = true;
+      doScan = true;
     }
+  }
 };
 
 void setup() {
-  myServo.attach(18); // 假设舵机连接到引脚9
+  myServo.attach(18);  // 假设舵机连接到引脚9
   Serial.begin(115200);
   BLEDevice::init("");
-pinMode(ledPin, OUTPUT); // 设置LED引脚为输出模式
+  pinMode(ledPin, OUTPUT);  // 设置LED引脚为输出模式
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setInterval(1349);
@@ -102,6 +109,12 @@ pinMode(ledPin, OUTPUT); // 设置LED引脚为输出模式
 }
 
 void loop() {
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+    readData();
+  }
   if (doConnect) {
     if (connectToServer()) {
       Serial.println("We are now connected to the BLE Server.");
@@ -115,7 +128,7 @@ void loop() {
   if (connected) {
     if (pRemoteCharacteristic->canRead()) {
       String value = pRemoteCharacteristic->readValue();
-      
+
       Serial.print("Raw value read from characteristic: ");
       for (size_t i = 0; i < value.length(); i++) {
         Serial.print((int)value[i]);
@@ -126,7 +139,7 @@ void loop() {
       if (value.length() >= 1) {
         int intValue = (uint8_t)value[0];
         Serial.print("Parsed int value: ");
-        Serial.println(intValue); // 打印解析后的整数值
+        Serial.println(intValue);  // 打印解析后的整数值
 
         if (intValue >= 0 && intValue < 7) {
           Serial.print("Switch characteristic value: ");
@@ -156,7 +169,7 @@ void handleCharacteristicValue(const String& value) {
 
   // 检查当前值是否不同于上次读取的值
   if (value != lastValue) {
-    lastValue = value; // 更新上次读取的值
+    lastValue = value;  // 更新上次读取的值
     if (value == "curtain") {
       toggleCurtain();
     } else if (value == "light") {
@@ -184,4 +197,22 @@ void toggleLed() {
   ledState = !ledState;
   digitalWrite(ledPin, ledState ? HIGH : LOW);
   Serial.println("Toggling LED...");
+}
+void readData() {
+  float humidity = dht.readHumidity();
+  float temperature = dht.readTemperature();
+
+  // 检查读取是否成功
+  if (isnan(humidity) || isnan(temperature)) {
+    Serial.println("无法读取传感器数据");
+    return;
+  }
+
+  // 打印读取的温度和湿度
+  Serial.print("温度: ");
+  Serial.print(temperature);
+  Serial.print(" °C ");
+  Serial.print("湿度: ");
+  Serial.print(humidity);
+  Serial.println(" %");
 }
