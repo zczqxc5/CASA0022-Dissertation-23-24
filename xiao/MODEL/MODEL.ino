@@ -305,7 +305,7 @@ void loop() {
   unsigned long currentDisplayMillis = millis();
   if (currentDisplayMillis - previousDisplayMillis >= displayInterval && strcmp(max_label, previous_label) != 0) {
     previousDisplayMillis = currentDisplayMillis;
-    
+    previous_label = max_label;
   }
 }
 
@@ -320,10 +320,11 @@ void update_max_probability_label(ei_impulse_result_t result) {
     }
   }
 
-if (max_label != nullptr) {
+  if (max_label != nullptr) {
+    Serial.print("Max label: ");
+    Serial.println(max_label);
     if (previous_label == nullptr || strcmp(previous_label, max_label) != 0) {
-      Serial.print("Max label: ");
-      Serial.println(max_label);
+
 
       if (strcmp(max_label, "hello") == 0) {
         vibrateMotor(true);
@@ -340,11 +341,11 @@ if (max_label != nullptr) {
         vibrateMotor(false);
         delay(200);
       }
-      
+
       previous_label = max_label;
     }
   } else {
-    previous_label = nullptr; // 重置previous_label如果没有max_label
+    previous_label = nullptr;  // 重置previous_label如果没有max_label
   }
 }
 
@@ -360,10 +361,10 @@ void vibrateMotor(bool on) {
   if (on) {
     Serial.println("Motor ON command sent");
     digitalWrite(MOTOR_PIN, HIGH);  // 开启电机
-    delay(500);  // 震动1秒
+    delay(500);                    // 震动1秒
   } else {
     Serial.println("Motor OFF command sent");
     digitalWrite(MOTOR_PIN, LOW);  // 关闭电机
-    delay(500);  // 停止1秒
+    delay(500);                   // 停止1秒
   }
 }
