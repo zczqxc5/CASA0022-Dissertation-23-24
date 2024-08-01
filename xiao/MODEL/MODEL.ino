@@ -7,16 +7,16 @@
 #include <ArduinoBLE.h>
 
 #define LABEL_COUNT 7
+#define MOTOR_PIN 2
+const char *labels[LABEL_COUNT] = { "bye", "cuetain", "display", "hello", "light", "music", "other" };
 
-const char* labels[LABEL_COUNT] = { "bye", "cuetain", "display", "hello", "light", "music", "other" };
-
-int getLabelId(const char* label) {
+int getLabelId(const char *label) {
   for (int i = 0; i < LABEL_COUNT; i++) {
     if (strcmp(labels[i], label) == 0) {
       return i;
     }
   }
-  return -1; // 未找到标签
+  return -1;  // 未找到标签
 }
 
 // 初始化传感器对象
@@ -24,7 +24,7 @@ LSM6DS3 myIMU(I2C_MODE, 0x6A);  // 默认I2C地址0x6A
 
 BLEService ledService("19b10000-e8f2-537e-4f6c-d104768a1214");  // 自定义服务UUID
 
-BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite); // 定义labelCharacteristic
+BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite);  // 定义labelCharacteristic
 
 enum sensor_status {
   NOT_USED = -1,
@@ -149,11 +149,15 @@ static bool ei_connect_fusion_list(const char *input_list) {
 }
 
 void setup() {
+  pinMode(MOTOR_PIN, OUTPUT);
+  digitalWrite(MOTOR_PIN, LOW);  // 确保电机初始关闭
+
   Serial.begin(9600);
 
   if (!BLE.begin()) {
     Serial.println("starting Bluetooth® Low Energy module failed!");
-    while (1);
+    while (1)
+      ;
   }
 
   BLE.setAdvertisingInterval(32);
@@ -302,7 +306,6 @@ void loop() {
   if (currentDisplayMillis - previousDisplayMillis >= displayInterval && strcmp(max_label, previous_label) != 0) {
     previousDisplayMillis = currentDisplayMillis;
     
-    previous_label = max_label;
   }
 }
 
@@ -317,17 +320,50 @@ void update_max_probability_label(ei_impulse_result_t result) {
     }
   }
 
-  if (max_label != nullptr) {
-    Serial.print("Max label: ");
-    Serial.println(max_label);
+if (max_label != nullptr) {
+    if (previous_label == nullptr || strcmp(previous_label, max_label) != 0) {
+      Serial.print("Max label: ");
+      Serial.println(max_label);
+
+      if (strcmp(max_label, "hello") == 0) {
+        vibrateMotor(true);
+        delay(200);
+        vibrateMotor(false);
+        delay(200);
+      } else if (strcmp(max_label, "bye") == 0) {
+        vibrateMotor(true);
+        delay(200);
+        vibrateMotor(false);
+        delay(200);
+        vibrateMotor(true);
+        delay(200);
+        vibrateMotor(false);
+        delay(200);
+      }
+      
+      previous_label = max_label;
+    }
+  } else {
+    previous_label = nullptr; // 重置previous_label如果没有max_label
   }
 }
 
-void updateDisplay(const char* label) {
+void updateDisplay(const char *label) {
   Display.Clear(WHITE);
 
   int x = (240 - strlen(label) * 10) / 2;
   int y = (240 - 20) / 2;
 
   Display.DrawString_EN(x, y, label, &Font20, WHITE, BLACK);
+}
+void vibrateMotor(bool on) {
+  if (on) {
+    Serial.println("Motor ON command sent");
+    digitalWrite(MOTOR_PIN, HIGH);  // 开启电机
+    delay(500);  // 震动1秒
+  } else {
+    Serial.println("Motor OFF command sent");
+    digitalWrite(MOTOR_PIN, LOW);  // 关闭电机
+    delay(500);  // 停止1秒
+  }
 }
