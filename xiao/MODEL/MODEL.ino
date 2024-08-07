@@ -1,7 +1,10 @@
-#include <fan_inferencing.h>
+#include <fonts.h>
+#include <st7789v2.h>
+
+#include <new_inferencing.h>
 #include <Wire.h>
 #include <LSM6DS3.h>
-#include <st7789v2.h>
+
 #include "SPI.h"
 #include "seeed.h"
 #include <ArduinoBLE.h>
@@ -56,7 +59,7 @@ const char *previous_label = "";
 unsigned long previousMillis = 0;
 unsigned long previousSampleMillis = 0;
 unsigned long previousDisplayMillis = 0;
-const unsigned long sampleInterval = 2500;
+const unsigned long sampleInterval = 1000;
 const unsigned long displayInterval = 1000;
 
 st7789v2 Display;
