@@ -19,15 +19,15 @@ int getLabelId(const char *label) {
       return i;
     }
   }
-  return -1;  // 未找到标签
+  return -1;  
 }
 
-// 初始化传感器对象
-LSM6DS3 myIMU(I2C_MODE, 0x6A);  // 默认I2C地址0x6A
 
-BLEService ledService("19b10000-e8f2-537e-4f6c-d104768a1214");  // 自定义服务UUID
+LSM6DS3 myIMU(I2C_MODE, 0x6A);  
 
-BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite);  // 定义labelCharacteristic
+BLEService ledService("19b10000-e8f2-537e-4f6c-d104768a1214");  
+
+BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite);  
 
 enum sensor_status {
   NOT_USED = -1,
@@ -348,8 +348,7 @@ void update_max_probability_label(ei_impulse_result_t result) {
       previous_label = max_label;
     }
   } else {
-    previous_label = nullptr;  // 重置previous_label如果没有max_label
-  }
+    previous_label = nullptr;  
 }
 
 void updateDisplay(const char *label) {
@@ -363,11 +362,11 @@ void updateDisplay(const char *label) {
 void vibrateMotor(bool on) {
   if (on) {
     Serial.println("Motor ON command sent");
-    digitalWrite(MOTOR_PIN, HIGH);  // 开启电机
-    delay(500);                    // 震动1秒
+    digitalWrite(MOTOR_PIN, HIGH);  
+    delay(500);                    
   } else {
     Serial.println("Motor OFF command sent");
-    digitalWrite(MOTOR_PIN, LOW);  // 关闭电机
-    delay(500);                   // 停止1秒
+    digitalWrite(MOTOR_PIN, LOW); 
+    delay(500);                   
   }
 }
