@@ -19,15 +19,15 @@ int getLabelId(const char *label) {
       return i;
     }
   }
-  return -1;  
+  return -1;
 }
 
 
-LSM6DS3 myIMU(I2C_MODE, 0x6A);  
+LSM6DS3 myIMU(I2C_MODE, 0x6A);
 
-BLEService ledService("19b10000-e8f2-537e-4f6c-d104768a1214");  
+BLEService ledService("19b10000-e8f2-537e-4f6c-d104768a1214");
 
-BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite);  
+BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite);
 
 enum sensor_status {
   NOT_USED = -1,
@@ -61,6 +61,9 @@ unsigned long previousSampleMillis = 0;
 unsigned long previousDisplayMillis = 0;
 const unsigned long sampleInterval = 1000;
 const unsigned long displayInterval = 1000;
+
+bool isActive = false;  // 增加状态变量，初始为 false
+
 
 st7789v2 Display;
 
@@ -208,6 +211,7 @@ void setup() {
   Display.Init();
   Display.SetBacklight(100);
   Display.Clear(WHITE);
+  display();
 }
 
 void loop() {
@@ -328,12 +332,14 @@ void update_max_probability_label(ei_impulse_result_t result) {
     Serial.println(max_label);
     if (previous_label == nullptr || strcmp(previous_label, max_label) != 0) {
 
-
+      // 在识别到 "hello" 或 "bye" 时更新显示内容
       if (strcmp(max_label, "hello") == 0) {
         vibrateMotor(true);
         delay(200);
         vibrateMotor(false);
         delay(200);
+        isActive = true;
+        updateDisplay("Ready!       ");  // 在屏幕上显示 "Ready!"
       } else if (strcmp(max_label, "bye") == 0) {
         vibrateMotor(true);
         delay(200);
@@ -343,30 +349,78 @@ void update_max_probability_label(ei_impulse_result_t result) {
         delay(200);
         vibrateMotor(false);
         delay(200);
+        isActive = false;
+        updateDisplay("Byebye!");  // 在屏幕上显示 "bye!"
+        updatevalue("       ");
       }
-
+      if (isActive) {
+        if (strcmp(max_label, "light") == 0) {
+          updatevalue("light  ");
+        }else if (strcmp(max_label, "cuetain") == 0){
+          updatevalue("curtain");
+        }else if (strcmp(max_label, "display") == 0){
+          updatevalue("display");
+        }else if (strcmp(max_label, "music") == 0){
+          updatevalue("music  ");
+        }
+      }
       previous_label = max_label;
     }
   } else {
-    previous_label = nullptr;  
+    previous_label = nullptr;
+  }
 }
 
-void updateDisplay(const char *label) {
-  Display.Clear(WHITE);
 
+void updateDisplay(const char *label) {
   int x = (240 - strlen(label) * 10) / 2;
   int y = (240 - 20) / 2;
-
-  Display.DrawString_EN(x, y, label, &Font20, WHITE, BLACK);
+  Display.DrawString_EN(30, 100, label, &Font20, WHITE, BLACK);
+}
+void updatevalue(const char *label) {
+  Display.DrawString_EN(120, 100, label, &Font20, WHITE, BLACK);
 }
 void vibrateMotor(bool on) {
   if (on) {
     Serial.println("Motor ON command sent");
-    digitalWrite(MOTOR_PIN, HIGH);  
-    delay(500);                    
+    digitalWrite(MOTOR_PIN, HIGH);
+    delay(500);
   } else {
     Serial.println("Motor OFF command sent");
-    digitalWrite(MOTOR_PIN, LOW); 
-    delay(500);                   
+    digitalWrite(MOTOR_PIN, LOW);
+    delay(500);
   }
+}
+
+void display() {
+  updateDisplay("Hi!");
+  Display.DrawLine(15, 65, 65, 65, MAGENTA, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+  Display.DrawLine(15, 70, 80, 70, MAGENTA, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+
+  Display.DrawRectangle(15, 80, 225, 150, GRAY, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+
+  Display.DrawCircle(10, 10, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 10, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 10, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 10, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawCircle(230, 10, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 10, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 10, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 10, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawCircle(10, 270, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 270, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 270, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 270, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawCircle(230, 270, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 270, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 270, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 270, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawLine(195, 160, 225, 160, GRAYBLUE, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+  Display.DrawLine(175, 165, 225, 165, GRAYBLUE, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+  Display.DrawString_EN(30, 125, "Silent Home", &Font20, WHITE, BLACK);
+  Display.DrawString_EN(20, 180, "By: Xin Cheng", &Font20, WHITE, BLACK);
 }
