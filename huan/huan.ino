@@ -1,33 +1,23 @@
 #include <ArduinoBLE.h>
+#include <st7789v2.h>
 
-// 蓝牙特性定义
-BLEService ledService("19b10000-e8f2-537e-4f6c-d104768a1214");  
-BLEIntCharacteristic labelCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214", BLERead | BLEWrite);
-
-// 用于连接的全局变量
 BLEDevice peripheral;
+st7789v2 Display;
+#define MOTOR_PIN 2
+
+
+// 全局变量，保存特性
 BLECharacteristic characteristic1;
 BLECharacteristic characteristic2;
 BLECharacteristic characteristic3;
+float lastValue = 0.0;  // 定义一个变量保存最后一次读取的值
+bool firstRead = true;  // 添加一个标志变量来跟踪是否是第一次读取
 
-#define LABEL_COUNT 7
-const char *labels[LABEL_COUNT] = { "bye", "cuetain", "display", "hello", "light", "music", "other" };
 
-// 获取标签ID的函数
-int getLabelId(const char *label) {
-  for (int i = 0; i < LABEL_COUNT; i++) {
-    if (strcmp(labels[i], label) == 0) {
-      return i;
-    }
-  }
-  return -1;  
-}
-
-// 连接到指定外设的函数
 bool connectToPeripheral(BLEDevice &peripheral) {
   delay(5000);
   Serial.print("Forming a connection to ");
-  
+
   const int maxAttempts = 20;
   int attempts = 0;
   bool connected = false;
@@ -82,59 +72,30 @@ bool connectToPeripheral(BLEDevice &peripheral) {
 }
 
 void setup() {
+    pinMode(MOTOR_PIN, OUTPUT);
+  digitalWrite(MOTOR_PIN, LOW);  
   Serial.begin(9600);
 
   if (!BLE.begin()) {
-    Serial.println("starting Bluetooth® Low Energy module failed!");
-    while (1);
+    Serial.println("Starting BLE failed!");
+    while (1)
+      ;
   }
 
-  BLE.setAdvertisingInterval(32);
   BLE.setConnectionInterval(6, 12);
 
-  Serial.println("Bluetooth® Low Energy module initialized.");
-
-  BLE.setLocalName("XIAO");
-  BLE.setAdvertisedService(ledService);
-
-  ledService.addCharacteristic(labelCharacteristic);
-  BLE.addService(ledService);
-
-  labelCharacteristic.writeValue(0);
-  BLE.advertise();
-
-  Serial.println("Bluetooth device active, waiting for connections...");
-
-  BLE.scan();  // 开始扫描其他外设
+  Serial.println("BLE Central - Scanning for peripherals...");
+  BLE.scan();
+  Display.SetRotate(180);
+  Display.Init();
+  Display.SetBacklight(100);
+  Display.Clear(WHITE);
+  display();
 }
 
+
 void loop() {
-  BLEDevice central = BLE.central();
-
-  // 外设模式：等待中央设备连接并发送数据
-  if (central) {
-    if (central.connected()) {
-      unsigned long currentMillis = millis();
-      static unsigned long previousMillis = 0;
-
-      if (currentMillis - previousMillis >= 2500) {
-        previousMillis = currentMillis;
-        const char* max_label = "hello"; // 示例标签
-        int labelId = getLabelId(max_label);
-        if (labelId != -1) {
-          labelCharacteristic.writeValue(labelId);
-          Serial.print("Sent via Bluetooth: ");
-          Serial.println(labelId);
-        }
-      }
-    } else {
-      Serial.print("Disconnected from central: ");
-      Serial.println(central.address());
-    }
-  }
-
-  // 中央设备模式：扫描并连接到其他外设
-  peripheral = BLE.available();
+  BLEDevice peripheral = BLE.available();
 
   if (peripheral) {
     Serial.print("Found device with address: ");
@@ -142,7 +103,7 @@ void loop() {
     Serial.print(" and name: ");
     Serial.println(peripheral.localName());
 
-    if (peripheral.address() == "c4:de:e2:b9:b6:8e") {  // 替换为你的目标设备地址
+    if (peripheral.address() == "c4:de:e2:b9:b6:8e") {
       Serial.println("Found the target device. Attempting to connect...");
 
       BLE.stopScan();
@@ -180,16 +141,36 @@ void loop() {
             Serial.println("Characteristic 2 is not readable.");
           }
 
-          // 读取 characteristic3
+          // 读取 characteristic3 并检测其值是否为 0100 0000 (64)
           if (characteristic3.canRead()) {
             uint8_t valueBytes[4];
             characteristic3.readValue(valueBytes, 4);
 
-            float value;
-            memcpy(&value, valueBytes, sizeof(value));
+            // 假设我们只关心第一个字节
+            uint8_t value = valueBytes[0];
 
-            Serial.print("Characteristic 3 value: ");
-            Serial.println(value, 2);
+            Serial.print("Characteristic 3 value (byte 0): ");
+            Serial.println(value, BIN);
+
+            // 检查是否第7位（第6位索引）为1
+            if (value == 1) {  // 0x40 is 0100 0000 in hexadecimal
+
+              if (!firstRead) {  // 如果不是第一次读取
+                vibrateMotor(true);
+                delay(200);
+                vibrateMotor(false);
+                delay(200);
+                vibrateMotor(true);
+                delay(200);
+                vibrateMotor(false);
+                delay(200);
+                Display.DrawString_EN(30, 100, "Knocking", &Font20, WHITE, RED);
+                delay(5000);
+                updateDisplay("Hi        ");
+              } else {
+                firstRead = false;  // 标志第一次读取已经完成
+              }
+            }
           } else {
             Serial.println("Characteristic 3 is not readable.");
           }
@@ -207,6 +188,59 @@ void loop() {
     Serial.println("No peripherals found, continuing scan...");
   }
 
-  BLE.poll();
-  delay(1000);  // 等待1秒再循环
+  delay(1000);
+}
+
+
+void updateDisplay(const char *label) {
+  int x = (240 - strlen(label) * 10) / 2;
+  int y = (240 - 20) / 2;
+  Display.DrawString_EN(30, 100, label, &Font20, WHITE, BLACK);
+}
+void updatevalue(const char *label) {
+  Display.DrawString_EN(120, 100, label, &Font20, WHITE, BLACK);
+}
+void vibrateMotor(bool on) {
+  if (on) {
+    Serial.println("Motor ON command sent");
+    digitalWrite(MOTOR_PIN, HIGH);
+    delay(500);
+  } else {
+    Serial.println("Motor OFF command sent");
+    digitalWrite(MOTOR_PIN, LOW);
+    delay(500);
+  }
+}
+
+void display() {
+  updateDisplay("Hi!");
+  Display.DrawLine(15, 65, 65, 65, MAGENTA, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+  Display.DrawLine(15, 70, 80, 70, MAGENTA, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+
+  Display.DrawRectangle(15, 80, 225, 150, GRAY, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+
+  Display.DrawCircle(10, 10, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 10, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 10, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 10, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawCircle(230, 10, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 10, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 10, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 10, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawCircle(10, 270, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 270, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 270, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(10, 270, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawCircle(230, 270, 25, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 270, 20, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 270, 15, MAGENTA, DOT_PIXEL_2X2, DRAW_FILL_EMPTY);
+  Display.DrawCircle(230, 270, 10, GRAYBLUE, DOT_PIXEL_2X2, DRAW_FILL_FULL);
+
+  Display.DrawLine(195, 160, 225, 160, GRAYBLUE, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+  Display.DrawLine(175, 165, 225, 165, GRAYBLUE, DOT_PIXEL_2X2, LINE_STYLE_SOLID);
+  Display.DrawString_EN(30, 125, "Silent Home", &Font20, WHITE, BLACK);
+  Display.DrawString_EN(20, 180, "By: Xin Cheng", &Font20, WHITE, BLACK);
 }

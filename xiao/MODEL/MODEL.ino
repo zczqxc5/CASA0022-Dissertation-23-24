@@ -62,7 +62,6 @@ unsigned long previousDisplayMillis = 0;
 const unsigned long sampleInterval = 1000;
 const unsigned long displayInterval = 1000;
 
-bool isActive = false;  // 增加状态变量，初始为 false
 
 
 st7789v2 Display;
@@ -156,8 +155,7 @@ static bool ei_connect_fusion_list(const char *input_list) {
 
 void setup() {
   pinMode(MOTOR_PIN, OUTPUT);
-  digitalWrite(MOTOR_PIN, LOW);  // 确保电机初始关闭
-
+  digitalWrite(MOTOR_PIN, LOW);  
   Serial.begin(9600);
 
   if (!BLE.begin()) {
@@ -332,14 +330,13 @@ void update_max_probability_label(ei_impulse_result_t result) {
     Serial.println(max_label);
     if (previous_label == nullptr || strcmp(previous_label, max_label) != 0) {
 
-      // 在识别到 "hello" 或 "bye" 时更新显示内容
       if (strcmp(max_label, "hello") == 0) {
         vibrateMotor(true);
         delay(200);
         vibrateMotor(false);
         delay(200);
         isActive = true;
-        updateDisplay("Ready!       ");  // 在屏幕上显示 "Ready!"
+        updateDisplay("Ready!       "); 
       } else if (strcmp(max_label, "bye") == 0) {
         vibrateMotor(true);
         delay(200);
@@ -350,7 +347,7 @@ void update_max_probability_label(ei_impulse_result_t result) {
         vibrateMotor(false);
         delay(200);
         isActive = false;
-        updateDisplay("Byebye!");  // 在屏幕上显示 "bye!"
+        updateDisplay("Byebye!");  
         updatevalue("       ");
       }
       if (isActive) {
@@ -360,6 +357,7 @@ void update_max_probability_label(ei_impulse_result_t result) {
           updatevalue("curtain");
         }else if (strcmp(max_label, "display") == 0){
           updatevalue("display");
+          Display.DrawString_EN(30, 125, "Tem:22.2℃ Hum:46.9%", &Font20, WHITE, BLACK);
         }else if (strcmp(max_label, "music") == 0){
           updatevalue("music  ");
         }
