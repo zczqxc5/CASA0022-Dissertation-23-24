@@ -62,7 +62,7 @@ The system is designed to collect gesture data from a wearable device, process i
 1. Prepare hardwares and softwares from above list
 2. Making PCB then conneted hardwares or connected them as circuits
 3. Use Egen Impluse platform to build deployment of "Arduino Library", and import it into Arduino IDE
-4. Upload code to Xiao BLE Sense/Esp32 respectively from file[Xiao BLE Sense]/Esp32
+4. Upload code to Xiao BLE Sense/Esp32 respectively from file [Code-XiaoBLESense] /[Code-ESP32]
 5. 3d print(PLA material) and laser cut(3mm wood) the enclousure from file [Enclousure]
    
 
