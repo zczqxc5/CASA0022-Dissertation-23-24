@@ -8,7 +8,7 @@ This project integrates Tiny Machine Learning (TinyML) technology into low-cost,
 - Gesture recognition for controlling smart home devices
 - Vibration alerts for environmental sounds (e.g., door knocking)
 - Real-time display of environmental data (e.g., temperature, humidity) using gestures
-- 
+  
 ### Research Question
 To what extent can the integration of TinyML technology in low-cost microcontroller-based wearable devices facilitate seamless and precise smart home operations for individuals with hearing and speech challenges?
 
