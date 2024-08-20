@@ -38,6 +38,8 @@ To what extent can the integration of TinyML technology in low-cost microcontrol
   - Vibrating motor for feedback
   - 1.69-inch LCD IPS screen for environmental data display
   - Li-Po Battery 3.7V 140mAh
+ 
+  
 ![image](https://github.com/user-attachments/assets/129ab376-f153-49dd-b774-f51ccecc1fc9)
 
 ![4c1fe1656bfd53e33929082f7ee5c43](https://github.com/user-attachments/assets/80368752-2ae6-4918-bda7-3913d7156ce5)
