@@ -2,7 +2,7 @@
 ![c65d1a3ddbf9a18497049976181c432](https://github.com/user-attachments/assets/c0966193-d518-424d-9de7-6bd27cde3b9c)
 
 ## How to use device
-[Uploading copy_A15FBF07-489B-4D9C-815F-8CE176EFDEB2.mp4…](https://youtu.be/EPODbB0qoMU)
+[Video Presentation-Yotube Link](https://youtu.be/EPODbB0qoMU)
 
 
 ## Project Overview
