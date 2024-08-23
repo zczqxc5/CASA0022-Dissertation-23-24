@@ -7,7 +7,7 @@
 
 ## Project Overview
 
-This project integrates Tiny Machine Learning (TinyML) technology into low-cost, microcontroller-based wearable devices to facilitate seamless and precise smart home operations for individuals with hearing and speech challenges. By recognizing American Sign Language (ASL) gestures, the system allows users to control smart home devices without the need for voice commands.
+This project incorporates Tiny Machine Learning (TinyML) technology into affordable, microcontroller-based wearable devices to enable seamless and accurate smart home interactions for individuals with hearing and speech impairments. The system recognizes American Sign Language (ASL) gestures, allowing users to control smart home devices without relying on voice commands.
 ### Key Features:
 - Gesture recognition for controlling smart home devices
 - Vibration alerts for environmental sounds (e.g., door knocking)
@@ -103,14 +103,8 @@ The model demonstrated high accuracy in recognizing gestures like "Curtain," "Mu
 7 participants tested the system in a simulated smart home environment, and the overall accuracy during these tests was 91.28%. The average response time for smart home operations was 1.2 seconds.
 
 ### Confusion Matrix:
-|              | Predicted Curtain | Predicted Light | Predicted Music | Predicted Display | Predicted Hello | Predicted Bye | Predicted Other |
-|--------------|-------------------|----------------|-----------------|------------------|----------------|---------------|-----------------|
-| Actual Curtain | 60                | 0              | 0               | 0                | 0              | 0             | 3               |
-| Actual Light   | 0                 | 57             | 0               | 4                | 0              | 0             | 2               |
-| Actual Music   | 0                 | 0              | 60              | 0                | 0              | 0             | 3               |
-| Actual Display | 0                 | 3              | 0               | 59               | 0              | 0             | 1               |
-| Actual Hello   | 0                 | 1              | 0               | 0                | 59             | 2             | 1               |
-| Actual Bye     | 0                 | 0              | 0               | 0                | 1              | 61            | 1               |
+![image](https://github.com/user-attachments/assets/f133ac5f-8a5e-4aff-b2a1-b882188a8d4b)
+
 
 ## Limitations
 
